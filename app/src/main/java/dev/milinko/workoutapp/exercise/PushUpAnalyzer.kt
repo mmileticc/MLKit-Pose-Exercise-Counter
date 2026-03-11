@@ -7,6 +7,8 @@ import kotlin.math.sqrt
 class PushUpAnalyzer : ExerciseAnalyzer {
     private var lastDown = false
     private var count = 0
+    private val angleBuffer = mutableListOf<Double>()
+    private val BUFFER_SIZE = 3
 
     override fun analyze(poseLandmarks: Map<Int, PoseLandmark>): ExerciseResult {
         val leftShoulder = poseLandmarks[PoseLandmark.LEFT_SHOULDER]
@@ -26,17 +28,33 @@ class PushUpAnalyzer : ExerciseAnalyzer {
                           (rightElbow?.inFrameLikelihood ?: 0f) + 
                           (rightWrist?.inFrameLikelihood ?: 0f)
 
-        val (shoulder, elbow, wrist) = if (leftConfidence >= rightConfidence) {
-            Triple(leftShoulder, leftElbow, leftWrist)
+        val (shoulder, elbow, wrist, hip, knee) = if (leftConfidence >= rightConfidence) {
+            val h = poseLandmarks[PoseLandmark.LEFT_HIP]
+            val k = poseLandmarks[PoseLandmark.LEFT_KNEE]
+            listOf(leftShoulder, leftElbow, leftWrist, h, k)
         } else {
-            Triple(rightShoulder, rightElbow, rightWrist)
+            val h = poseLandmarks[PoseLandmark.RIGHT_HIP]
+            val k = poseLandmarks[PoseLandmark.RIGHT_KNEE]
+            listOf(rightShoulder, rightElbow, rightWrist, h, k)
         }
 
-        if (shoulder == null || elbow == null || wrist == null) {
-            return ExerciseResult(count, false, 0.0)
+        // Provera da li je ceo korisnik u frejmu (bar ključne tačke za sklek)
+        // Za sklekove su kritični rame, lakat, zglob ruke, kuk i bar koleno da bi se videla forma
+        val isUserInFrame = shoulder != null && elbow != null && wrist != null && hip != null && knee != null
+        
+        if (!isUserInFrame) {
+            return ExerciseResult(count, false, 0.0, isUserInFrame = false)
         }
 
-        val angle = calculateAngle(shoulder, elbow, wrist)
+        // Sigurni smo da nisu null zbog isUserInFrame provere
+        val rawAngle = calculateAngle(shoulder!!, elbow!!, wrist!!)
+        
+        // Smoothing
+        angleBuffer.add(rawAngle)
+        if (angleBuffer.size > BUFFER_SIZE) {
+            angleBuffer.removeAt(0)
+        }
+        val angle = angleBuffer.average()
 
         if (angle < 70) {
             lastDown = true
@@ -45,12 +63,13 @@ class PushUpAnalyzer : ExerciseAnalyzer {
             lastDown = false
         }
 
-        return ExerciseResult(count, angle in 60.0..175.0, angle)
+        return ExerciseResult(count, angle in 60.0..175.0, angle, isUserInFrame = true)
     }
 
     override fun reset() {
         count = 0
         lastDown = false
+        angleBuffer.clear()
     }
 
     private fun calculateAngle(a: PoseLandmark, b: PoseLandmark, c: PoseLandmark): Double {

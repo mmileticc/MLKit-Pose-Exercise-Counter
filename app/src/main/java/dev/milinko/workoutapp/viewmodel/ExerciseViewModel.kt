@@ -12,8 +12,10 @@ import dev.milinko.workoutapp.db.daos.ExerciseDao
 import dev.milinko.workoutapp.db.entitys.Exercise
 import jakarta.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Date
 
@@ -32,6 +34,9 @@ class ExerciseViewModel @Inject constructor(
 
     private val _isSessionActive = MutableStateFlow(false)
     val isSessionActive = _isSessionActive.asStateFlow()
+
+    val history: StateFlow<List<Exercise>> = dao.getAllExercises()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun startSession() {
         analyzer.reset()
