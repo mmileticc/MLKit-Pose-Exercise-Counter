@@ -29,26 +29,19 @@ class MainActivity : ComponentActivity() {
     // Launcher za runtime permission
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            if (isGranted) {
-                setupContent()
-            } else {
-                // Ako korisnik odbije, možeš prikazati poruku ili fallback UI
-            }
+            // Bez obzira na dozvolu, sada uvek postavljamo sadržaj
+            // UI će sam ponuditi ručni unos ako kamera nije dostupna
+            setupContent()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Provera da li je kamera već odobrena
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            setupContent()
-        } else {
-            // Ako nije, traži dozvolu
+        
+        // Uvek idemo na setupContent, ali usput proverimo/tražimo dozvolu
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        } else {
+            setupContent()
         }
     }
 

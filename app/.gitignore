@@ -1,1 +1,40 @@
 /build
+/.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+/.idea/deploymentTargetSelector.xml
+/.idea/deploymentTargetDropDown.xml
+.DS_Store
+/captures
+.externalNativeBuild
+.cxx
+*.iml
+*.ipr
+*.iws
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android
+*.stacktrace
+*.class
+*.log
+/app/build
+/app/local.properties
+
+# Keys
+*.jks
+*.keystore
+*.p12
+*.pem
+google-services.json
+
+# App specific
+/app/src/main/res/values/google_maps_api.xml

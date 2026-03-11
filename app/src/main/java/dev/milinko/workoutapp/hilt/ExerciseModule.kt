@@ -5,6 +5,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.milinko.workoutapp.exercise.ExerciseAnalyzer
+import dev.milinko.workoutapp.exercise.PullUpAnalyzer
 import dev.milinko.workoutapp.exercise.PushUpAnalyzer
 import dev.milinko.workoutapp.pose.PoseDetectorProcessor
 
@@ -13,7 +14,10 @@ import dev.milinko.workoutapp.pose.PoseDetectorProcessor
 object ExerciseModule {
 
     @Provides
-    fun provideExerciseAnalyzer(): ExerciseAnalyzer = PushUpAnalyzer()
+    fun providePushUpAnalyzer(): PushUpAnalyzer = PushUpAnalyzer()
+
+    @Provides
+    fun providePullUpAnalyzer(): PullUpAnalyzer = PullUpAnalyzer()
 
     @Provides
     fun providePoseDetectorProcessor(): PoseDetectorProcessor =

@@ -32,6 +32,34 @@ fun ExerciseScreen(viewModel: ExerciseViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val landmarks by viewModel.landmarks.collectAsState()
     val isSessionActive by viewModel.isSessionActive.collectAsState()
+    val showSummary by viewModel.showSummary.collectAsState()
+
+    val exerciseType by viewModel.currentExerciseType.collectAsState()
+
+    if (showSummary) {
+        AlertDialog(
+            onDismissRequest = { viewModel.discardSession() },
+            title = { Text("Pregled treninga") },
+            text = {
+                Column {
+                    val exerciseName = if (exerciseType == "Push Ups") "sklekova" else "zgibova"
+                    Text("Urađeno $exerciseName: ${state.count}", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Da li želite da sačuvate ovaj rezultat u istoriju?")
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.saveSession() }) {
+                    Text("SAČUVAJ")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.discardSession() }) {
+                    Text("ODBACI", color = Color.Red)
+                }
+            }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Gornja polovina: Vizuelni prikaz
@@ -71,32 +99,33 @@ fun ExerciseScreen(viewModel: ExerciseViewModel = hiltViewModel()) {
                 PoseOverlay(landmarks = landmarks, modifier = Modifier.fillMaxSize())
             }
 
-            // Upozorenje ako korisnik nije u frejmu
-            if (isSessionActive && !state.isUserInFrame) {
+            // Upozorenje ako korisnik nije u frejmu ili se ne vidi celo telo
+            if (isSessionActive && (state.visibilityMessage != null || !state.isUserInFrame)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.6f)),
+                        .background(Color.Black.copy(alpha = if (!state.isUserInFrame) 0.6f else 0.0f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(16.dp)
+                    ) {
                         Icon(
                             Icons.Default.Warning,
                             contentDescription = null,
-                            tint = Color.Yellow,
-                            modifier = Modifier.size(64.dp)
+                            tint = if (!state.isUserInFrame) Color.Red else Color.Yellow,
+                            modifier = Modifier.size(48.dp)
                         )
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(8.dp))
                         Text(
-                            "STANI CEO U KADAR",
+                            state.visibilityMessage ?: "STANI U KADAR",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
-                        Text(
-                            "Kamera mora videti glavu, ruke i kolena",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 14.sp
+                            fontSize = 16.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }
@@ -116,7 +145,7 @@ fun ExerciseScreen(viewModel: ExerciseViewModel = hiltViewModel()) {
             // Glavni brojač
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "SKLEKOVI",
+                    text = exerciseType.uppercase(),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -192,7 +221,7 @@ fun ExerciseScreen(viewModel: ExerciseViewModel = hiltViewModel()) {
                 ) {
                     Icon(Icons.Default.Stop, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("ZAVRŠI I SAČUVAJ", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("ZAVRŠI TRENING", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

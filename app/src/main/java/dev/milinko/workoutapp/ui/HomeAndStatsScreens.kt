@@ -20,6 +20,53 @@ import java.util.*
 fun HomeScreen(onStartTraining: () -> Unit, viewModel: ExerciseViewModel = hiltViewModel()) {
     val history by viewModel.history.collectAsState()
     val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
+    var showManualDialog by remember { mutableStateOf(false) }
+    var manualReps by remember { mutableStateOf("") }
+
+    val exerciseType by viewModel.currentExerciseType.collectAsState()
+
+    if (showManualDialog) {
+        AlertDialog(
+            onDismissRequest = { showManualDialog = false },
+            title = { Text("Ručni unos vežbe") },
+            text = {
+                Column {
+                    val exerciseLabel = if (exerciseType == "Push Ups") "sklekova" else "zgibova"
+                    Text("Unesite broj urađenih $exerciseLabel:")
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = manualReps,
+                        onValueChange = { if (it.all { char -> char.isDigit() }) manualReps = it },
+                        label = { Text("Broj ponavljanja") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val reps = manualReps.toIntOrNull() ?: 0
+                        if (reps > 0) {
+                            viewModel.logManualExercise(reps)
+                            showManualDialog = false
+                            manualReps = ""
+                        }
+                    },
+                    enabled = manualReps.isNotEmpty()
+                ) {
+                    Text("SAČUVAJ")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showManualDialog = false }) {
+                    Text("OTKAŽI")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -40,6 +87,30 @@ fun HomeScreen(onStartTraining: () -> Unit, viewModel: ExerciseViewModel = hiltV
                 modifier = Modifier.padding(bottom = 24.dp)
             )
 
+            Text(
+                text = "Izaberite vežbu:",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("Push Ups", "Pull Ups").forEach { type ->
+                    val isSelected = exerciseType == type
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setExerciseType(type) },
+                        label = { Text(if (type == "Push Ups") "Sklekovi" else "Zgibovi") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Button(
                 onClick = onStartTraining,
                 modifier = Modifier
@@ -47,7 +118,19 @@ fun HomeScreen(onStartTraining: () -> Unit, viewModel: ExerciseViewModel = hiltV
                     .height(56.dp),
                 shape = MaterialTheme.shapes.medium
             ) {
-                Text("ZAPOČNI NOVI TRENING", fontWeight = FontWeight.Bold)
+                Text("ZAPOČNI NOVI TRENING (KAMERA)", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = { showManualDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text("RUČNI UNOS VEŽBE", fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(32.dp))

@@ -1,3 +1,4 @@
+# Android
 *.iml
 .gradle
 /local.properties
@@ -13,3 +14,37 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Kotlin
+*.stacktrace
+*.class
+
+# Gradle
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Log files
+*.log
+
+# Android Studio
+*.iml
+.idea/
+*.ipr
+*.iws
+
+# Lint
+lint/
+build/outputs/lint-results*
+build/reports/lint-results*
+
+# Keys
+*.jks
+*.keystore
+*.p12
+*.pem
+google-services.json
+
+# App specific
+/app/build
+/app/src/main/res/values/google_maps_api.xml

@@ -11,5 +11,6 @@ data class ExerciseResult(
     val count: Int,
     val isCorrectForm: Boolean,
     val currentAngle: Double = 0.0,
-    val isUserInFrame: Boolean = true
+    val isUserInFrame: Boolean = true,
+    val visibilityMessage: String? = null
 )
