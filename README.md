@@ -37,7 +37,7 @@ PoseTrack is a modern Android application that uses Artificial Intelligence and 
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/mmileticc/-MLKit-Pose-Exercise-Counter.git 
+    git clone https://github.com/mmileticc/MLKit-Pose-Exercise-Counter.git 
     ```
 2.  Open the project in **Android Studio (Ladybug or newer)**.
 3.  Sync the project with Gradle files.
