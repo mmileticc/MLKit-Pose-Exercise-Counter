@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +39,17 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
     val exerciseType by viewModel.currentExerciseType.collectAsState()
 
     var showExitDialog by remember { mutableStateOf(false) }
+
+    // Keep screen on during training
+    val view = LocalView.current
+    DisposableEffect(isSessionActive) {
+        if (isSessionActive) {
+            view.keepScreenOn = true
+        }
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
 
     if (showExitDialog) {
         AlertDialog(
