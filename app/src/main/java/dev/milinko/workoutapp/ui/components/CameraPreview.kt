@@ -1,4 +1,4 @@
-package dev.milinko.workoutapp.camera
+package dev.milinko.workoutapp.ui.components
 
 import android.content.Context
 import androidx.camera.core.*

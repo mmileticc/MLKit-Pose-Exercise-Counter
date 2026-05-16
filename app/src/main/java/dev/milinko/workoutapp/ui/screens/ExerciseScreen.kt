@@ -1,10 +1,9 @@
-package dev.milinko.workoutapp.ui
+package dev.milinko.workoutapp.ui.screens
 
-import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -19,12 +18,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import dev.milinko.workoutapp.camera.CameraPreview
+import dev.milinko.workoutapp.ui.components.CameraPreview
 import dev.milinko.workoutapp.viewmodel.ExerciseViewModel
 import dev.milinko.workoutapp.db.entitys.Exercise
+import dev.milinko.workoutapp.ui.components.PoseOverlay
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -71,6 +72,41 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
             dismissButton = {
                 TextButton(onClick = { showExitDialog = false }) {
                     Text("CANCEL")
+                }
+            }
+        )
+    }
+
+    if (showSummary) {
+        AlertDialog(
+            onDismissRequest = { /* Prevent dismissal by clicking outside */ },
+            title = { Text("Rezime treninga") },
+            text = {
+                Column {
+                    Text("Odličan posao!")
+                    Spacer(Modifier.height(8.dp))
+                    Text("Ukupno ponavljanja: ${state.count}", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text("Vežba: $exerciseType")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.saveSession()
+                        onBack()
+                    }
+                ) {
+                    Text("SAČUVAJ")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.discardSession()
+                        onBack()
+                    }
+                ) {
+                    Text("ODBACI")
                 }
             }
         )
@@ -160,7 +196,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
                             fontWeight = FontWeight.Black,
                             fontSize = 28.sp,
                             lineHeight = 34.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -204,7 +240,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
                 Surface(
                     color = if (state.isCorrectForm) Color.Green.copy(alpha = 0.1f) else Color.Red.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(
+                    border = BorderStroke(
                         2.dp,
                         if (state.isCorrectForm) Color.Green else Color.Red
                     )
@@ -253,7 +289,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
                             fontSize = 20.sp
                         ),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                 }
             }

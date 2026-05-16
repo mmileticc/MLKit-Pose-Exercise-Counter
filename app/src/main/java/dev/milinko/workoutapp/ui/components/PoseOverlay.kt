@@ -1,4 +1,4 @@
-package dev.milinko.workoutapp.ui
+package dev.milinko.workoutapp.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -57,7 +57,7 @@ fun PoseOverlay(
                 // Koristi minimalnu vrednost inFrameLikelihood od oba landmarka za alpha
                 val minConfidence = minOf(start.inFrameLikelihood, end.inFrameLikelihood)
                 val lineAlpha = minConfidence.coerceIn(0f, 1f)
-                
+
                 drawLine(
                     color = Color.Cyan.copy(alpha = lineAlpha),
                     start = Offset(start.position.x, start.position.y),

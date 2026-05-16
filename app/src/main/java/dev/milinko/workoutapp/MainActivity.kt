@@ -19,9 +19,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.hilt.navigation.compose.hiltViewModel
-import dev.milinko.workoutapp.ui.ExerciseScreen
-import dev.milinko.workoutapp.ui.HomeScreen
-import dev.milinko.workoutapp.ui.StatisticsScreen
+import dev.milinko.workoutapp.ui.screens.ExerciseScreen
+import dev.milinko.workoutapp.ui.screens.HomeScreen
+import dev.milinko.workoutapp.ui.screens.StatisticsScreen
 import dev.milinko.workoutapp.ui.navigation.Screen
 import dev.milinko.workoutapp.viewmodel.ExerciseViewModel
 
