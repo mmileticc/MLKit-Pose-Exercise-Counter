@@ -2,6 +2,7 @@ package dev.milinko.workoutapp.exercise
 
 import android.util.Log
 import com.google.mlkit.vision.pose.PoseLandmark
+import dev.milinko.workoutapp.filters.EMA
 import kotlin.math.acos
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -31,31 +32,35 @@ class PullUpAnalyzer : ExerciseAnalyzer {
     private var repStartShoulderY: Float? = null
     private var repPeakShoulderY: Float? = null  // Najmanji Y (fizički najviše)
     private var peakAngle: Double? = null
+    private var hangStableFrames = 0
+    private var endStableFrames = 0
+    private var readyForRep = false
 
     // Timeout za PULLING_UP fazu — ako zaglavi predugo, reset
     private var pullingUpStartTime: Long = 0L
     private val PULLING_UP_TIMEOUT_MS = 5000L   // Max 5 sekundi za jedan rep
 
     private var prevShoulderY: Float? = null
+    private var prevWristY: Float? = null
+    private var wristStableFrames = 0
     private var chosenSide = -1
     private var frameCount = 0
 
     companion object {
         const val TAG = "PullUpAnalyzer"
 
-        // FIX 1: Baseline je FIKSAN nakon kalibracije.
-        // Koristimo PULL_ANGLE_DROP % od baseline-a umjesto apsolutnih stepeni
-        // Npr. baseline=177°, drop=40° → pull triggeruje na 137°
-        const val PULL_ANGLE_DROP = 40.0
+        // Thresholds
+        const val PULL_ANGLE_DROP = 25.0
+        const val LOWER_ANGLE_RECOVER = 12.0
+        const val MIN_SHOULDER_RISE_PX = 15f   // Povećano sa 5f za bolju sigurnost
+        const val WRIST_STABILITY_THRESHOLD = 15f // Max dozvoljeno pomeranje zgloba tokom rep-a
 
-        // FIX 2: Recover threshold — koliko ugao mora porasti od PEAK-a
-        // Koristimo manji broj jer EMA gladi oscilacije
-        const val LOWER_ANGLE_RECOVER = 25.0
-
-        // FIX 3: Smanjen min rise jer shoulderY varira malo na nekim uređajima
-        const val MIN_SHOULDER_RISE_PX = 12f
-
-        const val MAX_VELOCITY_PX = 25f
+        const val MAX_VELOCITY_PX = 30f
+        const val HANG_STABLE_FRAMES = 4
+        const val HANG_STABLE_VELOCITY = 8f
+        const val END_STABLE_FRAMES = 3
+        const val END_STABLE_VELOCITY = 10f
+        const val END_ANGLE_TOLERANCE = 12.0
     }
 
     override fun analyze(poseLandmarks: Map<Int, PoseLandmark>): ExerciseResult {
@@ -73,12 +78,24 @@ class PullUpAnalyzer : ExerciseAnalyzer {
         val rawAngle = calculateAngle(lm.shoulder, lm.elbow, lm.wrist)
         val sAngle = smoothAngle.update(rawAngle)
         val sShoulderY = smoothShoulderY.update(lm.shoulder.position.y).toFloat()
+        val wristY = lm.wrist.position.y
+
+        // Provera da li su šake iznad glave (glava je otprilike u nivou ramena ili malo iznad)
+        // PoseLandmark.y raste nadole, tako da manje y znači višu poziciju.
+        val handsAboveHead = wristY < lm.shoulder.position.y - 10f
 
         val velocity = prevShoulderY?.let { abs(sShoulderY - it) } ?: 0f
         prevShoulderY = sShoulderY
 
+        val wristVelocity = prevWristY?.let { abs(wristY - it) } ?: 0f
+        prevWristY = wristY
+
         if (shouldLog) {
-            Log.d(TAG, "[$phase] angle=${sAngle.toInt()}° shoulderY=${sShoulderY.toInt()} v=${velocity.toInt()} baseline=${baselineAngle?.toInt()}")
+            Log.d(TAG, "[$phase] angle=${sAngle.toInt()}° shoulderY=${sShoulderY.toInt()} v=${velocity.toInt()} handsUp=$handsAboveHead")
+        }
+
+        if (!handsAboveHead && phase != Phase.CALIBRATING) {
+            return result(sAngle, false, "HANDS MUST BE ABOVE HEAD")
         }
 
         return when (phase) {
@@ -95,6 +112,9 @@ class PullUpAnalyzer : ExerciseAnalyzer {
                     baselineAngle = calibFrames.takeLast(10).average()
                     calibFrames.clear()
                     phase = Phase.HANGING
+                    hangStableFrames = 0
+                    endStableFrames = 0
+                    readyForRep = false
                     Log.i(TAG, "✓ CALIBRATED baseline=${baselineAngle!!.toInt()}°")
                     result(sAngle, true, "READY! START PULLING")
                 } else {
@@ -107,16 +127,30 @@ class PullUpAnalyzer : ExerciseAnalyzer {
             Phase.HANGING -> {
                 val baseline = baselineAngle ?: 160.0
                 val dropNeeded = baseline - PULL_ANGLE_DROP
+                val isStableHang = sAngle > baseline - END_ANGLE_TOLERANCE && velocity < HANG_STABLE_VELOCITY
+
+                if (isStableHang) {
+                    hangStableFrames++
+                } else {
+                    hangStableFrames = 0
+                }
+
+                if (hangStableFrames >= HANG_STABLE_FRAMES) {
+                    readyForRep = true
+                }
 
                 // FIX 1: Baseline se NE AŽURIRA ovdje više!
                 // Ovo je bio izvor problema — svaki put kad bi se opružio više,
                 // threshold bi porastao i pull-up nikad ne bi bio detektovan
 
-                if (sAngle < dropNeeded && velocity < MAX_VELOCITY_PX) {
+                if (!readyForRep) {
+                    result(sAngle, true, "SETTLING...")
+                } else if (sAngle < dropNeeded && velocity < MAX_VELOCITY_PX) {
                     repStartShoulderY = sShoulderY
                     repPeakShoulderY = sShoulderY
                     peakAngle = sAngle
                     pullingUpStartTime = System.currentTimeMillis()
+                    endStableFrames = 0
                     phase = Phase.PULLING_UP
                     Log.i(TAG, "↑ PULL START angle=${sAngle.toInt()}° shoulderY=${sShoulderY.toInt()}")
                     result(sAngle, true, "PULLING!")
@@ -127,6 +161,13 @@ class PullUpAnalyzer : ExerciseAnalyzer {
 
             // ── IDE GORE ──────────────────────────────────────────────────────
             Phase.PULLING_UP -> {
+
+                // Provera stabilnosti šaka
+                if (wristVelocity > WRIST_STABILITY_THRESHOLD) {
+                    wristStableFrames = 0
+                } else {
+                    wristStableFrames++
+                }
 
                 // FIX 2: Timeout — ako smo u PULLING_UP predugo, vraćamo se u HANGING
                 // Ovo rješava problem "zaglavljenog" stanja iz loga (frejm 400-550)
@@ -164,24 +205,37 @@ class PullUpAnalyzer : ExerciseAnalyzer {
             // ── SPUŠTA SE — validacija ────────────────────────────────────────
             Phase.LOWERING -> {
                 val baseline = baselineAngle ?: 160.0
+                val isStableFinish = sAngle > baseline - END_ANGLE_TOLERANCE && velocity < END_STABLE_VELOCITY
 
-                if (sAngle > baseline - 20) {
+                if (isStableFinish) {
+                    endStableFrames++
+                } else {
+                    endStableFrames = 0
+                }
+
+                if (endStableFrames >= END_STABLE_FRAMES) {
                     val shoulderRise = (repStartShoulderY ?: sShoulderY) - (repPeakShoulderY ?: sShoulderY)
                     val angleChange = baseline - (peakAngle ?: sAngle)
 
                     val riseOk = shoulderRise >= MIN_SHOULDER_RISE_PX
                     val angleOk = angleChange >= PULL_ANGLE_DROP * 0.75
+                    val wristsWereStable = wristStableFrames > 5 // Barem 5 frejmova stabilnih šaka tokom pull-a
 
-                    Log.i(TAG, "REP CHECK rise=${shoulderRise.toInt()}px(need ${MIN_SHOULDER_RISE_PX.toInt()}) Δangle=${angleChange.toInt()}°(need ${(PULL_ANGLE_DROP*0.75).toInt()}) riseOk=$riseOk angleOk=$angleOk")
+                    Log.i(TAG, "REP CHECK rise=${shoulderRise.toInt()}px(need ${MIN_SHOULDER_RISE_PX.toInt()}) Δangle=${angleChange.toInt()}°(need ${(PULL_ANGLE_DROP*0.75).toInt()}) riseOk=$riseOk angleOk=$angleOk wristOk=$wristsWereStable")
 
                     phase = Phase.HANGING
+                    hangStableFrames = 0
+                    endStableFrames = 0
+                    wristStableFrames = 0
+                    readyForRep = true
 
-                    return if (riseOk && angleOk) {
+                    return if (riseOk && angleOk && wristsWereStable) {
                         count++
                         Log.i(TAG, "✓✓✓ REP $count!")
                         result(sAngle, true, "✓ REP $count!")
                     } else {
                         val reason = when {
+                            !wristsWereStable -> "KEEP HANDS STILL ON BAR"
                             !riseOk -> "GO HIGHER (${shoulderRise.toInt()}px < ${MIN_SHOULDER_RISE_PX.toInt()}px)"
                             else -> "FULL RANGE NEEDED"
                         }
@@ -224,15 +278,15 @@ class PullUpAnalyzer : ExerciseAnalyzer {
     )
 
     private fun chooseBestSide(lm: Map<Int, PoseLandmark>): SideLandmarks? {
-        val ls = lm[PoseLandmark.LEFT_SHOULDER]
-        val le = lm[PoseLandmark.LEFT_ELBOW]
-        val lw = lm[PoseLandmark.LEFT_WRIST]
-        val rs = lm[PoseLandmark.RIGHT_SHOULDER]
-        val re = lm[PoseLandmark.RIGHT_ELBOW]
-        val rw = lm[PoseLandmark.RIGHT_WRIST]
+        val leftShoulder = lm[PoseLandmark.LEFT_SHOULDER]
+        val leftElbow = lm[PoseLandmark.LEFT_ELBOW]
+        val leftWrist = lm[PoseLandmark.LEFT_WRIST]
+        val rightShoulder = lm[PoseLandmark.RIGHT_SHOULDER]
+        val rightElbow = lm[PoseLandmark.RIGHT_ELBOW]
+        val rightWrist = lm[PoseLandmark.RIGHT_WRIST]
 
-        val lScore = conf(ls) + conf(le) + conf(lw)
-        val rScore = conf(rs) + conf(re) + conf(rw)
+        val lScore = conf(leftShoulder) + conf(leftElbow) + conf(leftWrist)
+        val rScore = conf(rightShoulder) + conf(rightElbow) + conf(rightWrist)
 
         val useLeft = when (chosenSide) {
             0 -> lScore >= rScore - 0.5f
@@ -241,15 +295,15 @@ class PullUpAnalyzer : ExerciseAnalyzer {
         }
         chosenSide = if (useLeft) 0 else 1
 
-        val s = if (useLeft) ls else rs
-        val e = if (useLeft) le else re
-        val w = if (useLeft) lw else rw
+        val shoulder = if (useLeft) leftShoulder else rightShoulder
+        val elbow = if (useLeft) leftElbow else rightElbow
+        val wrist = if (useLeft) leftWrist else rightWrist
 
-        if (s == null || e == null || w == null) return null
-        if (s.inFrameLikelihood < 0.25f || e.inFrameLikelihood < 0.25f || w.inFrameLikelihood < 0.25f) return null
+        if (shoulder == null || elbow == null || wrist == null) return null
+        if (shoulder.inFrameLikelihood < 0.25f || elbow.inFrameLikelihood < 0.25f || wrist.inFrameLikelihood < 0.25f) return null
 
         val hip = if (useLeft) lm[PoseLandmark.LEFT_HIP] else lm[PoseLandmark.RIGHT_HIP]
-        return SideLandmarks(s, e, w, hip?.takeIf { it.inFrameLikelihood > 0.25f })
+        return SideLandmarks(shoulder, elbow, wrist, hip?.takeIf { it.inFrameLikelihood > 0.25f })
     }
 
     private fun conf(lm: PoseLandmark?) = lm?.inFrameLikelihood ?: 0f
@@ -276,22 +330,14 @@ class PullUpAnalyzer : ExerciseAnalyzer {
         repPeakShoulderY = null
         peakAngle = null
         prevShoulderY = null
+        prevWristY = null
         pullingUpStartTime = 0L
         chosenSide = -1
         frameCount = 0
+        hangStableFrames = 0
+        endStableFrames = 0
+        wristStableFrames = 0
+        readyForRep = false
     }
 }
 
-class EMA(private val alpha: Float) {
-    private var value: Double? = null
-    fun update(v: Float): Double {
-        value = if (value == null) v.toDouble() else alpha * v + (1 - alpha) * value!!
-        return value!!
-    }
-    fun update(v: Double): Double {
-        value = if (value == null) v else alpha * v + (1 - alpha) * value!!
-        return value!!
-    }
-    fun reset() { value = null }
-    fun get() = value
-}

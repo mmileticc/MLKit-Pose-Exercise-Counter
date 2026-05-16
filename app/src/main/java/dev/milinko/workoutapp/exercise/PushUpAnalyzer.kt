@@ -8,9 +8,9 @@ class PushUpAnalyzer : ExerciseAnalyzer {
     private var count = 0
     private var isUp = true // Stanje: Gore (ruke opružene)
     private val angleBuffer = mutableListOf<Double>()
-    private val BUFFER_SIZE = 8 // Povećavamo buffer za bolju stabilnost
+    private val BUFFER_SIZE = 6  // Smanjeno sa 8 jer će ViewModel već da filtira
     private var lastSmoothAngle = 0.0
-    private val ALPHA = 0.2 // Faktor za Exponential Moving Average (EMA)
+    private val ALPHA = 0.15f  // Smanjeno sa 0.2f jer ViewModel već filtira sa 0.08f
 
     private var initialShoulderWristDist: Float? = null
 
@@ -86,13 +86,13 @@ class PushUpAnalyzer : ExerciseAnalyzer {
 
         // DETEKCIJA SKLEKA
         // 1. Spuštanje (DOWN)
-        // Uslovi: Ugao < 75 stepeni I rame se približilo šaci za bar 25%
-        if (isUp && smoothAngle < 75 && distRatio < 0.75f) {
+        // Uslovi: Ugao < 100 stepeni I rame se približilo šaci za bar 15%
+        if (isUp && smoothAngle < 100 && distRatio < 0.85f) {  // Promenjeno: 85→100, 0.80→0.85
             isUp = false
         } 
         // 2. Podizanje (UP) - Kraj ponavljanja
-        // Uslovi: Ugao > 155 stepeni I bili smo dole
-        else if (!isUp && smoothAngle > 155) {
+        // Uslovi: Ugao > 130 stepeni I bili smo dole
+        else if (!isUp && smoothAngle > 130) {  // Promenjeno: 145→130
             count++
             isUp = true
         }
