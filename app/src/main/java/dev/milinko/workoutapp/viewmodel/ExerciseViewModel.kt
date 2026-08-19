@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Calendar
 import java.util.Date
 import kotlin.math.abs
 
@@ -48,6 +49,63 @@ class ExerciseViewModel @Inject constructor(
 
     val history: StateFlow<List<Exercise>> = dao.getAllExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _statsExerciseFilter = MutableStateFlow("All")
+    val statsExerciseFilter = _statsExerciseFilter.asStateFlow()
+
+    private val _statsDateFilter = MutableStateFlow(DateFilter.ALL)
+    val statsDateFilter = _statsDateFilter.asStateFlow()
+
+    enum class DateFilter { TODAY, WEEK, MONTH, ALL }
+
+    val filteredHistory: StateFlow<List<Exercise>> = kotlinx.coroutines.flow.combine(
+        history,
+        _statsExerciseFilter,
+        _statsDateFilter
+    ) { history, exerciseFilter, dateFilter ->
+        val now = Calendar.getInstance()
+        val startOfToday = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+
+        val startOfWeek = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+
+        val startOfMonth = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+
+        history.filter { exercise ->
+            val matchesExercise = exerciseFilter == "All" || exercise.name.contains(exerciseFilter, ignoreCase = true)
+            val matchesDate = when (dateFilter) {
+                DateFilter.TODAY -> exercise.date.after(startOfToday) || exercise.date == startOfToday
+                DateFilter.WEEK -> exercise.date.after(startOfWeek) || exercise.date == startOfWeek
+                DateFilter.MONTH -> exercise.date.after(startOfMonth) || exercise.date == startOfMonth
+                DateFilter.ALL -> true
+            }
+            matchesExercise && matchesDate
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setStatsExerciseFilter(filter: String) {
+        _statsExerciseFilter.value = filter
+    }
+
+    fun setStatsDateFilter(filter: DateFilter) {
+        _statsDateFilter.value = filter
+    }
 
     // EMA filtri za temporal smoothing svake X i Y koordinate landmarka
     private val landmarkEmaFilters = mutableMapOf<Int, Pair<EMA, EMA>>() // landmarkId -> (xFilter, yFilter)
