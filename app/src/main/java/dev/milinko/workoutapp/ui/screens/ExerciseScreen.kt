@@ -211,6 +211,23 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // Exercise picker - only before starting, switching mid-session would reset the count
+            if (!isSessionActive) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ExerciseType.entries.forEach { type ->
+                        FilterChip(
+                            selected = exerciseType == type,
+                            onClick = { viewModel.setExerciseType(type) },
+                            label = { Text(type.displayName) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
             // Main counter
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
