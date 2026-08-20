@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.milinko.workoutapp.exercise.ExerciseType
 import dev.milinko.workoutapp.ui.components.CameraPreview
 import dev.milinko.workoutapp.viewmodel.ExerciseViewModel
 import dev.milinko.workoutapp.ui.components.PoseOverlay
@@ -83,7 +84,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
                     Text("Odličan posao!")
                     Spacer(Modifier.height(8.dp))
                     Text("Ukupno ponavljanja: ${state.count}", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Text("Vežba: $exerciseType")
+                    Text("Vežba: ${exerciseType.displayName}")
                 }
             },
             confirmButton = {
@@ -213,7 +214,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
             // Main counter
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = if (exerciseType == "Push Ups") "PUSH UPS" else "PULL UPS",
+                    text = exerciseType.displayName.uppercase(),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -256,7 +257,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
                         text = "${state.currentAngle.toInt()}°",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (exerciseType == "Push Ups") MaterialTheme.colorScheme.primary else Color.Cyan
+                        color = if (exerciseType == ExerciseType.PUSH_UPS) MaterialTheme.colorScheme.primary else Color.Cyan
                     )
                     Text(
                         text = "ELBOW ANGLE",
@@ -267,7 +268,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
             }
 
             // Additional info about hands stability for pull-ups
-            if (exerciseType == "Pull Ups" && isSessionActive) {
+            if (exerciseType == ExerciseType.PULL_UPS && isSessionActive) {
                 Surface(
                     color = if (state.visibilityMessage?.contains("STABILIZATION") == true || state.visibilityMessage?.contains("STEADY") == true)
                         Color.Yellow.copy(alpha = 0.2f) else Color.Green.copy(alpha = 0.2f),

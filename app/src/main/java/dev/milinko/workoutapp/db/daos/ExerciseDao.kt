@@ -20,4 +20,7 @@ interface ExerciseDao {
 
     @androidx.room.Query("SELECT * FROM Exercise ORDER BY date DESC")
     fun getAllExercises(): kotlinx.coroutines.flow.Flow<List<Exercise>>
+
+    @androidx.room.Query("SELECT DISTINCT name FROM Exercise ORDER BY name")
+    fun getDistinctExerciseNames(): kotlinx.coroutines.flow.Flow<List<String>>
 }

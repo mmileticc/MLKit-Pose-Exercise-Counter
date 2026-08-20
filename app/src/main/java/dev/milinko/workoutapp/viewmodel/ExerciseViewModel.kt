@@ -11,13 +11,14 @@ import android.graphics.PointF
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.milinko.workoutapp.db.daos.ExerciseDao
 import dev.milinko.workoutapp.db.entitys.Exercise
-import dev.milinko.workoutapp.exercise.PullUpAnalyzer
-import dev.milinko.workoutapp.exercise.PushUpAnalyzer
+import dev.milinko.workoutapp.exercise.ExerciseAnalyzerRegistry
+import dev.milinko.workoutapp.exercise.ExerciseType
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -26,13 +27,12 @@ import kotlin.math.abs
 
 @HiltViewModel
 class ExerciseViewModel @Inject constructor(
-    private val pushUpAnalyzer: PushUpAnalyzer,
-    private val pullUpAnalyzer: PullUpAnalyzer,
+    private val analyzerRegistry: ExerciseAnalyzerRegistry,
     private val processor: PoseDetectorProcessor,
     private val dao: ExerciseDao
 ) : ViewModel() {
 
-    private val _currentExerciseType = MutableStateFlow("Push Ups")
+    private val _currentExerciseType = MutableStateFlow(ExerciseType.PUSH_UPS)
     val currentExerciseType = _currentExerciseType.asStateFlow()
 
     private val _uiState = MutableStateFlow(ExerciseResult(0, true))
@@ -48,6 +48,23 @@ class ExerciseViewModel @Inject constructor(
     val showSummary = _showSummary.asStateFlow()
 
     val history: StateFlow<List<Exercise>> = dao.getAllExercises()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val distinctExerciseNames: StateFlow<List<String>> = dao.getDistinctExerciseNames()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Suggestions for the manual-log autocomplete: built-in camera exercises + anything already logged.
+    val manualNameSuggestions: StateFlow<List<String>> = distinctExerciseNames
+        .map { dbNames -> (ExerciseType.entries.map { it.displayName } + dbNames).distinct().sorted() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ExerciseType.entries.map { it.displayName })
+
+    // Accumulated total reps per exercise across the FULL history (not affected by the stats filter).
+    val totalsByExercise: StateFlow<List<Pair<String, Int>>> = history
+        .map { list ->
+            list.groupBy { it.name }
+                .map { (name, entries) -> name to entries.sumOf { it.numOf } }
+                .sortedByDescending { it.second }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _statsExerciseFilter = MutableStateFlow("All")
@@ -123,7 +140,7 @@ class ExerciseViewModel @Inject constructor(
         const val MIN_CONFIDENCE_FOR_LANDMARK = 0.3f  // Minimum confidence da se landmark koristi
     }
 
-    fun setExerciseType(type: String) {
+    fun setExerciseType(type: ExerciseType) {
         _currentExerciseType.value = type
         analyzer().reset()
         // Resetuj EMA filtere pri promeni vežbe
@@ -133,7 +150,7 @@ class ExerciseViewModel @Inject constructor(
         _uiState.value = ExerciseResult(0, true)
     }
 
-    private fun analyzer(): ExerciseAnalyzer = if (_currentExerciseType.value == "Push Ups") pushUpAnalyzer else pullUpAnalyzer
+    private fun analyzer(): ExerciseAnalyzer = analyzerRegistry.get(_currentExerciseType.value)
 
     fun startSession() {
         analyzer().reset()
@@ -154,11 +171,12 @@ class ExerciseViewModel @Inject constructor(
     fun saveSession() {
         val result = _uiState.value
         if (result.count > 0) {
+            val type = _currentExerciseType.value
             viewModelScope.launch {
                 dao.insert(
                     Exercise(
-                        name = _currentExerciseType.value,
-                        type = true,
+                        name = type.id,
+                        type = !type.isTimeBased,
                         numOf = result.count,
                         date = Date()
                     )
@@ -181,11 +199,18 @@ class ExerciseViewModel @Inject constructor(
         }
     }
 
-    fun logManualExercise(reps: Int, type: String = _currentExerciseType.value) {
+    /**
+     * Manual entry accepts any exercise name, not just camera-supported [ExerciseType]s -
+     * street workout exercises without an analyzer (dips, L-sit, muscle-up...) still need to
+     * be logged into the same history.
+     */
+    fun logManualExercise(name: String, reps: Int) {
+        val trimmedName = name.trim()
+        if (trimmedName.isEmpty() || reps <= 0) return
         viewModelScope.launch {
             dao.insert(
                 Exercise(
-                    name = if (type.startsWith("Manual")) type else "Manual $type",
+                    name = trimmedName,
                     type = true,
                     numOf = reps,
                     date = Date()

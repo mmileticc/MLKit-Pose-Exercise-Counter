@@ -3,7 +3,9 @@ package dev.milinko.workoutapp.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,119 +41,161 @@ fun StatisticsScreen(viewModel: ExerciseViewModel = hiltViewModel()) {
     val filteredHistory by viewModel.filteredHistory.collectAsState()
     val currentExerciseFilter by viewModel.statsExerciseFilter.collectAsState()
     val currentDateFilter by viewModel.statsDateFilter.collectAsState()
+    val distinctExerciseNames by viewModel.distinctExerciseNames.collectAsState()
+    val totalsByExercise by viewModel.totalsByExercise.collectAsState()
+    val exerciseFilterOptions = remember(distinctExerciseNames) { listOf("All") + distinctExerciseNames }
 
+    // Reps only add up meaningfully when they're all the same exercise - with "All" selected the
+    // history mixes push-ups, pull-ups, manual entries, etc., so a combined rep count/graph would
+    // be meaningless. Both are shown only once a single exercise is picked from the dropdown.
+    val isSingleExerciseSelected = currentExerciseFilter != "All"
     val totalReps = filteredHistory.sumOf { it.numOf }
-    val totalSessions = filteredHistory.size
+    val totalEntries = filteredHistory.size
 
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Statistics") })
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Default.FilterList, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    text = "Filters",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ExerciseFilterDropdown(
-                    selectedFilter = currentExerciseFilter,
-                    onFilterSelected = { viewModel.setStatsExerciseFilter(it) },
-                    modifier = Modifier.weight(1f)
-                )
-
-                DateFilterDropdown(
-                    selectedFilter = currentDateFilter,
-                    onFilterSelected = { viewModel.setStatsDateFilter(it) },
-                    modifier = Modifier.weight(1f)
-                )
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.FilterList, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(text = "Filters", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ExerciseFilterDropdown(
+                            selectedFilter = currentExerciseFilter,
+                            options = exerciseFilterOptions,
+                            onFilterSelected = { viewModel.setStatsExerciseFilter(it) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        DateFilterDropdown(
+                            selectedFilter = currentDateFilter,
+                            onFilterSelected = { viewModel.setStatsDateFilter(it) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Stat Summary
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                StatCard(
-                    title = "Total Reps",
-                    value = totalReps.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title = "Workouts",
-                    value = totalSessions.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Graph
-            if (filteredHistory.isNotEmpty()) {
-                Text(
-                    text = "Activity Graph (Last 7 Days)",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                WorkoutBarChart(
-                    exercises = filteredHistory,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // History Section
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "History",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "$totalSessions sessions",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(filteredHistory) { exercise ->
-                    ExerciseHistoryRow(
-                        exercise = exercise,
-                        onDelete = { viewModel.deleteExercise(it) }
+            item {
+                // Stat Summary - Total Reps only makes sense once one exercise is isolated
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (isSingleExerciseSelected) {
+                        StatCard(
+                            title = "Total Reps",
+                            value = totalReps.toString(),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    StatCard(
+                        title = "Entries",
+                        value = totalEntries.toString(),
+                        modifier = Modifier.weight(1f)
                     )
                 }
+            }
+
+            // Accumulated totals per exercise, across the FULL history (unaffected by filters above)
+            if (totalsByExercise.isNotEmpty()) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Ukupno po vežbi",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            totalsByExercise.forEach { (name, total) ->
+                                StatCard(
+                                    title = name,
+                                    value = total.toString(),
+                                    modifier = Modifier.width(120.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Graph - only meaningful for a single isolated exercise (see isSingleExerciseSelected above)
+            if (isSingleExerciseSelected && filteredHistory.isNotEmpty()) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "$currentExerciseFilter - Last 7 Active Days",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        WorkoutBarChart(
+                            exercises = filteredHistory,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                        )
+                    }
+                }
+            }
+
+            item {
+                // History Section
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "History",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "$totalEntries entries (long-press to delete)",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+
+            if (filteredHistory.isEmpty()) {
+                item {
+                    Text(
+                        text = "No entries for this filter yet.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+            }
+
+            items(filteredHistory, key = { it.id }) { exercise ->
+                ExerciseHistoryRow(
+                    exercise = exercise,
+                    onDelete = { viewModel.deleteExercise(it) }
+                )
             }
         }
     }
@@ -160,11 +204,11 @@ fun StatisticsScreen(viewModel: ExerciseViewModel = hiltViewModel()) {
 @Composable
 fun ExerciseFilterDropdown(
     selectedFilter: String,
+    options: List<String>,
     onFilterSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val options = listOf("All", "Push Ups", "Pull Ups")
 
     Box(modifier = modifier) {
         OutlinedCard(
