@@ -10,7 +10,7 @@ import dev.milinko.workoutapp.db.entitys.Exercise
 
 
 @TypeConverters(DateConverter::class)
-@Database(entities = [Exercise::class], version = 1, exportSchema = false)
+@Database(entities = [Exercise::class], version = 1, exportSchema = true)
 abstract class ExerciseDatabase : RoomDatabase(){
 
 //  registering dao-s for example -> abstract fun workoutDao(): WorkoutDao
@@ -22,7 +22,7 @@ abstract fun exerciseDao(): ExerciseDao
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     ExerciseDatabase::class.java,
-                    "running_database"
+                    "running_database" // leftover name from an earlier template; internal file name only, not worth a migration to rename
                 ).build()
                 INSTANCE = instance
                 // return instance

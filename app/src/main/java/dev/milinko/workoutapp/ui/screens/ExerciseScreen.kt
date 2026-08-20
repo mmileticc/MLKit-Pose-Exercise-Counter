@@ -24,10 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.milinko.workoutapp.ui.components.CameraPreview
 import dev.milinko.workoutapp.viewmodel.ExerciseViewModel
-import dev.milinko.workoutapp.db.entitys.Exercise
 import dev.milinko.workoutapp.ui.components.PoseOverlay
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -322,38 +319,6 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
                 }
             }
         }
-    }
-}
-
-@Composable
-fun HistoryRow(exercise: Exercise) {
-    val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(
-                text = exercise.name,
-                color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = dateFormat.format(exercise.date),
-                color = Color.White.copy(alpha = 0.5f),
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
-        Text(
-            text = "${exercise.numOf}",
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Black
-        )
     }
 }
 }

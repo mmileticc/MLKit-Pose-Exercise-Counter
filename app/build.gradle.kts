@@ -92,6 +92,8 @@ dependencies {
     implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
     implementation("com.google.mlkit:pose-detection-accurate:18.0.0-beta5")
 
+}
 
-
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }

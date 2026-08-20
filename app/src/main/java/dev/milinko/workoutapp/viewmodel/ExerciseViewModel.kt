@@ -175,6 +175,12 @@ class ExerciseViewModel @Inject constructor(
         _uiState.value = ExerciseResult(0, true)
     }
 
+    fun deleteExercise(exercise: Exercise) {
+        viewModelScope.launch {
+            dao.delete(exercise)
+        }
+    }
+
     fun logManualExercise(reps: Int, type: String = _currentExerciseType.value) {
         viewModelScope.launch {
             dao.insert(

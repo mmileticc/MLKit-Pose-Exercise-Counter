@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.milinko.workoutapp.db.entitys.Exercise
+import dev.milinko.workoutapp.ui.components.ExerciseHistoryRow
 import dev.milinko.workoutapp.viewmodel.ExerciseViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -41,7 +42,6 @@ fun StatisticsScreen(viewModel: ExerciseViewModel = hiltViewModel()) {
 
     val totalReps = filteredHistory.sumOf { it.numOf }
     val totalSessions = filteredHistory.size
-    val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()) }
 
     Scaffold(
         topBar = {
@@ -147,35 +147,10 @@ fun StatisticsScreen(viewModel: ExerciseViewModel = hiltViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(filteredHistory) { exercise ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        ListItem(
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { 
-                                Text(
-                                    text = "${exercise.numOf} reps",
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                ) 
-                            },
-                            supportingContent = { Text(dateFormat.format(exercise.date)) },
-                            trailingContent = { 
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.secondaryContainer
-                                ) {
-                                    Text(
-                                        text = exercise.name,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            }
-                        )
-                    }
+                    ExerciseHistoryRow(
+                        exercise = exercise,
+                        onDelete = { viewModel.deleteExercise(it) }
+                    )
                 }
             }
         }

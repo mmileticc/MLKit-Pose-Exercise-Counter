@@ -13,8 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -36,15 +34,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.milinko.workoutapp.ui.components.ExerciseHistoryRow
 import dev.milinko.workoutapp.viewmodel.ExerciseViewModel
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(onStartTraining: () -> Unit, viewModel: ExerciseViewModel = hiltViewModel()) {
     val history by viewModel.history.collectAsState()
-    val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     var showManualDialog by remember { mutableStateOf(false) }
     var manualReps by remember { mutableStateOf("") }
 
@@ -173,33 +169,10 @@ fun HomeScreen(onStartTraining: () -> Unit, viewModel: ExerciseViewModel = hiltV
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(history.take(5)) { exercise ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .padding(16.dp)
-                                .fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(text = exercise.name, fontWeight = FontWeight.Bold)
-                                Text(
-                                    text = dateFormat.format(exercise.date),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(
-                                text = "${exercise.numOf} reps",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
+                    ExerciseHistoryRow(
+                        exercise = exercise,
+                        onDelete = { viewModel.deleteExercise(it) }
+                    )
                 }
             }
         }
