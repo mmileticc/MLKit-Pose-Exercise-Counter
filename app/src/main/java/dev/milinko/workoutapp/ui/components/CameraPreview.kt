@@ -18,6 +18,7 @@ import java.util.concurrent.Executors
 @Composable
 fun CameraPreview(
     modifier: Modifier = Modifier,
+    lensFacing: Int = CameraSelector.LENS_FACING_FRONT,
     onFrame: (ImageProxy) -> Unit
 ) {
     val context = LocalContext.current
@@ -55,10 +56,14 @@ fun CameraPreview(
                         }
                     }
 
+                val cameraSelector = CameraSelector.Builder()
+                    .requireLensFacing(lensFacing)
+                    .build()
+
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(
                     lifecycleOwner,
-                    CameraSelector.DEFAULT_FRONT_CAMERA,
+                    cameraSelector,
                     preview,
                     imageAnalyzer
                 )

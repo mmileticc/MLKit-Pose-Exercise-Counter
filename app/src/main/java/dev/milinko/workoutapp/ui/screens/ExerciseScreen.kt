@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.milinko.workoutapp.exercise.ExerciseType
+import androidx.camera.core.CameraSelector
 import dev.milinko.workoutapp.ui.components.CameraPreview
 import dev.milinko.workoutapp.viewmodel.ExerciseViewModel
 import dev.milinko.workoutapp.ui.components.PoseOverlay
@@ -38,6 +40,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
     val exerciseType by viewModel.currentExerciseType.collectAsState()
 
     var showExitDialog by remember { mutableStateOf(false) }
+    var isFrontCamera by remember { mutableStateOf(true) }
 
     // Keep screen on during training
     val view = LocalView.current
@@ -148,8 +151,25 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
             ) {
                 CameraPreview(
                     modifier = Modifier.fillMaxSize(),
+                    lensFacing = if (isFrontCamera) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK,
                     onFrame = { viewModel.onFrame(it) }
                 )
+
+                // Prednja/zadnja kamera toggle
+                IconButton(
+                    onClick = { isFrontCamera = !isFrontCamera },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.Black.copy(alpha = 0.5f))
+                ) {
+                    Icon(
+                        Icons.Default.Cameraswitch,
+                        contentDescription = "Switch camera",
+                        tint = Color.White
+                    )
+                }
             }
 
             // Levi ćošak: Skenirani skelet

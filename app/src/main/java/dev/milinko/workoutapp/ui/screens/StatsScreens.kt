@@ -293,22 +293,31 @@ fun WorkoutBarChart(
     exercises: List<Exercise>,
     modifier: Modifier = Modifier
 ) {
-    // Group by date and sum reps
+    // Group by date and sum reps, then lay out a fixed window of the last 7 calendar
+    // days (today back to 6 days ago) - including days with 0 reps - instead of just the
+    // last 7 dates that happen to have any logged activity, so the "Last 7 Days" label
+    // is actually accurate and gaps in training show up as empty bars, not skipped days.
     val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     val displayFormat = SimpleDateFormat("dd.MM", Locale.getDefault())
-    val groupedData = exercises.groupBy { dateFormat.format(it.date) }
+    val repsByDateKey = exercises.groupBy { dateFormat.format(it.date) }
         .mapValues { entry -> entry.value.sumOf { it.numOf } }
-        .toList()
-        .sortedBy { it.first } // Sort by ISO date string
-        .takeLast(7)
-        .map { (dateStr, count) -> 
-            val date = dateFormat.parse(dateStr) ?: Date()
-            displayFormat.format(date) to count
-        }
 
-    if (groupedData.isEmpty()) return
+    val today = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val groupedData = (6 downTo 0).map { daysAgo ->
+        val day = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -daysAgo) }
+        val key = dateFormat.format(day.time)
+        displayFormat.format(day.time) to (repsByDateKey[key] ?: 0)
+    }
 
-    val maxReps = (groupedData.maxOfOrNull { it.second } ?: 1).toFloat()
+    // coerceAtLeast(1f): with the fixed 7-day window groupedData is never empty, but every
+    // day in it can legitimately be 0 reps (e.g. filtered history has no activity this week) -
+    // guard against dividing by 0 below.
+    val maxReps = (groupedData.maxOfOrNull { it.second } ?: 1).toFloat().coerceAtLeast(1f)
     val primaryColor = MaterialTheme.colorScheme.primary
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
 
