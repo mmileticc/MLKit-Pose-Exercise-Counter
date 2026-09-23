@@ -106,7 +106,7 @@ fun HomeScreen(onStartTraining: () -> Unit, viewModel: ExerciseViewModel = hiltV
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("FitVision") })
+            TopAppBar(title = { Text("PoseTrack") })
         }
     ) { padding ->
         Column(

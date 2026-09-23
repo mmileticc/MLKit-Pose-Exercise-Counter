@@ -13,6 +13,7 @@ import dev.milinko.workoutapp.db.daos.ExerciseDao
 import dev.milinko.workoutapp.db.entitys.Exercise
 import dev.milinko.workoutapp.exercise.ExerciseAnalyzerRegistry
 import dev.milinko.workoutapp.exercise.ExerciseType
+import dev.milinko.workoutapp.filters.EMA
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -334,29 +335,4 @@ class ExerciseViewModel @Inject constructor(
             }
         }
     }
-}
-
-/**
- * Exponential Moving Average filter za temporal smoothing koordinata
- * Manja vrednost alpha-e daje više smoothing-a (sporija adaptacija)
- * Veća vrednost alpha-e daje manje smoothing-a (brža adaptacija)
- */
-class EMA(private val alpha: Float) {
-    private var value: Double? = null
-    
-    fun update(v: Float): Double {
-        value = if (value == null) v.toDouble() else alpha * v + (1 - alpha) * value!!
-        return value!!
-    }
-    
-    fun update(v: Double): Double {
-        value = if (value == null) v else alpha * v + (1 - alpha) * value!!
-        return value!!
-    }
-    
-    fun reset() { 
-        value = null 
-    }
-    
-    fun get() = value
 }

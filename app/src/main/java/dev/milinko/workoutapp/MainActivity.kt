@@ -38,9 +38,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
+        // Nema kamere na uređaju (uses-feature je required=false pa app sme da se instalira i tu)
+        // -> ne traži dozvolu za kameru uopšte, samo idi na manuelni unos.
+        val hasCamera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+
         // Uvek idemo na setupContent, ali usput proverimo/tražimo dozvolu
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+        if (hasCamera && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         } else {
             setupContent()
