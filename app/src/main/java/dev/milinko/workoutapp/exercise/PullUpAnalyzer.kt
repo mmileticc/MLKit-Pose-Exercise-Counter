@@ -54,7 +54,6 @@ class PullUpAnalyzer : ExerciseAnalyzer {
 
         val wristVelocity = prevWristY?.let { abs(wristY - it) } ?: 0f
         prevWristY = wristY
-        wristStableFrames = if (wristVelocity > WRIST_STABILITY_THRESHOLD) 0 else wristStableFrames + 1
 
         if (shouldLog) {
             Log.d(TAG, "[${counter.phase}] angle=${sAngle.toInt()}° shoulderY=${sShoulderY.toInt()} handsUp=$handsAboveHead")
@@ -62,6 +61,22 @@ class PullUpAnalyzer : ExerciseAnalyzer {
 
         if (!handsAboveHead && counter.phase != PhaseBasedRepCounter.Phase.CALIBRATING) {
             return result(sAngle, false, "HANDS MUST BE ABOVE HEAD")
+        }
+
+        // Only track wrist stability *during* the pull (WORKING) - this is what stops someone
+        // from swinging their body/arms to fling themselves up and still getting a rep counted
+        // (see "Fixed a pullup counting with fixed wrists position..." in git history). Reset
+        // between reps (RESTING); freeze through RETURNING so the tally reached during WORKING
+        // survives to be read by extraValidation below at rep-confirm time. Without this the
+        // counter kept accumulating stable frames while just hanging still before the rep even
+        // started, making the check pass almost regardless of what happened during the pull.
+        // Placed after the handsAboveHead gate (same as the original pre-refactor code) so a
+        // frame where hands read as below head doesn't touch this tally either way.
+        when (counter.phase) {
+            PhaseBasedRepCounter.Phase.WORKING ->
+                wristStableFrames = if (wristVelocity > WRIST_STABILITY_THRESHOLD) 0 else wristStableFrames + 1
+            PhaseBasedRepCounter.Phase.RESTING -> wristStableFrames = 0
+            else -> Unit
         }
 
         val update = counter.update(
