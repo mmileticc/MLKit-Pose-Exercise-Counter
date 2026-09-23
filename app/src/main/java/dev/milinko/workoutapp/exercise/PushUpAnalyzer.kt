@@ -1,18 +1,26 @@
 package dev.milinko.workoutapp.exercise
 
 import com.google.mlkit.vision.pose.PoseLandmark
-import kotlin.math.acos
+import dev.milinko.workoutapp.filters.EMA
 import kotlin.math.sqrt
 
 class PushUpAnalyzer : ExerciseAnalyzer {
-    private var count = 0
-    private var isUp = true // Stanje: Gore (ruke opružene)
-    private val angleBuffer = mutableListOf<Double>()
-    private val BUFFER_SIZE = 6  // Smanjeno sa 8 jer će ViewModel već da filtira
-    private var lastSmoothAngle = 0.0
-    private val ALPHA = 0.15f  // Smanjeno sa 0.2f jer ViewModel već filtira sa 0.08f
 
-    private var initialShoulderWristDist: Float? = null
+    // NOTE: unlike pull-ups (calibrated/tuned through extensive physical testing), these
+    // thresholds are a first estimate for the new calibrated state machine and will likely need
+    // another round of physical-testing adjustment (see REFACTOR_PLAN.md Faza 3).
+    private val counter = PhaseBasedRepCounter(
+        PhaseBasedRepCounter.Config(
+            angleDropToStart = 60.0,
+            angleRecoverMargin = 15.0,
+            minMovement = 15f, // min. change in shoulder-to-wrist distance (px)
+            repTimeoutMs = 5000L
+        )
+    )
+
+    private val smoothAngle = EMA(0.20f)
+    private val smoothMovement = EMA(0.25f)
+    private val sideSelector = SideSelector()
 
     override fun analyze(poseLandmarks: Map<Int, PoseLandmark>): ExerciseResult {
         val leftShoulder = poseLandmarks[PoseLandmark.LEFT_SHOULDER]
@@ -27,105 +35,64 @@ class PushUpAnalyzer : ExerciseAnalyzer {
         val rightHip = poseLandmarks[PoseLandmark.RIGHT_HIP]
         val rightKnee = poseLandmarks[PoseLandmark.RIGHT_KNEE]
 
-        // Provera poverenja (confidence) za obe strane
-        val leftConf = (leftShoulder?.inFrameLikelihood ?: 0f) + (leftElbow?.inFrameLikelihood ?: 0f) + (leftWrist?.inFrameLikelihood ?: 0f)
-        val rightConf = (rightShoulder?.inFrameLikelihood ?: 0f) + (rightElbow?.inFrameLikelihood ?: 0f) + (rightWrist?.inFrameLikelihood ?: 0f)
+        val leftScore = landmarkConfidence(leftShoulder) + landmarkConfidence(leftElbow) + landmarkConfidence(leftWrist)
+        val rightScore = landmarkConfidence(rightShoulder) + landmarkConfidence(rightElbow) + landmarkConfidence(rightWrist)
+        val useLeft = sideSelector.chooseLeft(leftScore, rightScore)
 
-        val (shoulder, elbow, wrist, hip, knee) = if (leftConf >= rightConf) {
-            listOf(leftShoulder, leftElbow, leftWrist, leftHip, leftKnee)
-        } else {
-            listOf(rightShoulder, rightElbow, rightWrist, rightHip, rightKnee)
+        val shoulder = if (useLeft) leftShoulder else rightShoulder
+        val elbow = if (useLeft) leftElbow else rightElbow
+        val wrist = if (useLeft) leftWrist else rightWrist
+        val hip = if (useLeft) leftHip else rightHip
+        val knee = if (useLeft) leftKnee else rightKnee
+
+        // Minimalni uslov za brojanje: Rame, lakat i zglob ruke, sa dovoljnom pouzdanošću
+        if (shoulder == null || elbow == null || wrist == null) {
+            return noArms()
         }
-
-        // Minimalni uslov za brojanje: Rame, lakat i zglob ruke
-        val hasArms = shoulder != null && elbow != null && wrist != null
-        if (!hasArms) {
-            return ExerciseResult(
-                count = count,
-                isCorrectForm = false,
-                currentAngle = 0.0,
-                isUserInFrame = false,
-                visibilityMessage = "GET IN FRAME (ARMS)",
-                areHandsFixed = false
-            )
+        if (landmarkConfidence(shoulder) < MIN_LANDMARK_CONFIDENCE ||
+            landmarkConfidence(elbow) < MIN_LANDMARK_CONFIDENCE ||
+            landmarkConfidence(wrist) < MIN_LANDMARK_CONFIDENCE
+        ) {
+            return noArms()
         }
 
         // Provera da li se vidi donji deo tela (za preciznu formu)
         val hasLowerBody = hip != null && knee != null
-        val visibilityMessage = if (!hasLowerBody) {
-            "FULL BODY NOT VISIBLE (FORM MAY BE INACCURATE)"
-        } else null
+        val lowVisibilityMessage = if (!hasLowerBody) "FULL BODY NOT VISIBLE (FORM MAY BE INACCURATE)" else null
 
-        val angle = calculateAngle(shoulder!!, elbow!!, wrist!!)
-        
-        // Poboljšani smoothing (kombinacija Moving Average i EMA)
-        angleBuffer.add(angle)
-        if (angleBuffer.size > BUFFER_SIZE) angleBuffer.removeAt(0)
-        
-        val averageAngle = angleBuffer.average()
-        
-        // Primena EMA (Exponential Moving Average) za dodatnu stabilnost bez prevelikog laga
-        val smoothAngle = if (lastSmoothAngle == 0.0) {
-            averageAngle
-        } else {
-            (ALPHA * averageAngle) + ((1 - ALPHA) * lastSmoothAngle)
-        }
-        lastSmoothAngle = smoothAngle
+        val rawAngle = calculateAngle(shoulder, elbow, wrist)
+        val sAngle = smoothAngle.update(rawAngle)
 
-        // Rastojanje rame-šaka (za proveru da li se telo zaista spušta ka podu/šakama)
-        val currentDist = sqrt(
-            Math.pow((shoulder.position.x - wrist.position.x).toDouble(), 2.0) +
-            Math.pow((shoulder.position.y - wrist.position.y).toDouble(), 2.0)
-        ).toFloat()
+        val dx = (shoulder.position.x - wrist.position.x).toDouble()
+        val dy = (shoulder.position.y - wrist.position.y).toDouble()
+        val rawDist = sqrt(dx * dx + dy * dy)
+        val sMovement = smoothMovement.update(rawDist).toFloat()
 
-        if (isUp && smoothAngle > 155) {
-            initialShoulderWristDist = currentDist
-        }
+        val update = counter.update(angle = sAngle, movement = sMovement)
 
-        val distRatio = if (initialShoulderWristDist != null) currentDist / initialShoulderWristDist!! else 1.0f
-
-        // DETEKCIJA SKLEKA
-        // 1. Spuštanje (DOWN)
-        // Uslovi: Ugao < 100 stepeni I rame se približilo šaci za bar 15%
-        if (isUp && smoothAngle < 100 && distRatio < 0.85f) {  // Promenjeno: 85→100, 0.80→0.85
-            isUp = false
-        } 
-        // 2. Podizanje (UP) - Kraj ponavljanja
-        // Uslovi: Ugao > 130 stepeni I bili smo dole
-        else if (!isUp && smoothAngle > 130) {  // Promenjeno: 145→130
-            count++
-            isUp = true
-        }
-
-        // Forma je "OK" ako je ugao u granicama, ali upozoravamo ako ne vidimo celo telo
         return ExerciseResult(
-            count = count,
-            isCorrectForm = smoothAngle in 60.0..180.0,
-            currentAngle = smoothAngle,
+            count = counter.count,
+            isCorrectForm = update.isCorrectForm,
+            currentAngle = update.angle,
             isUserInFrame = true,
-            visibilityMessage = visibilityMessage,
+            visibilityMessage = lowVisibilityMessage ?: update.message,
             areHandsFixed = true // Uvek true za sklekove da ne bi izlazila poruka za stabilizaciju
         )
     }
 
+    private fun noArms() = ExerciseResult(
+        count = counter.count,
+        isCorrectForm = false,
+        currentAngle = 0.0,
+        isUserInFrame = false,
+        visibilityMessage = "GET IN FRAME (ARMS)",
+        areHandsFixed = false
+    )
+
     override fun reset() {
-        count = 0
-        isUp = true
-        angleBuffer.clear()
-        lastSmoothAngle = 0.0
-        initialShoulderWristDist = null
-    }
-
-    private fun calculateAngle(a: PoseLandmark, b: PoseLandmark, c: PoseLandmark): Double {
-        val abX = a.position.x - b.position.x
-        val abY = a.position.y - b.position.y
-        val cbX = c.position.x - b.position.x
-        val cbY = c.position.y - b.position.y
-
-        val dot = abX * cbX + abY * cbY
-        val magAB = sqrt(abX * abX + abY * abY)
-        val magCB = sqrt(cbX * cbX + cbY * cbY)
-
-        return Math.toDegrees(acos(dot / (magAB * magCB)).toDouble())
+        counter.reset()
+        smoothAngle.reset()
+        smoothMovement.reset()
+        sideSelector.reset()
     }
 }
