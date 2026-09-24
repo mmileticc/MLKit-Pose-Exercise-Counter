@@ -34,6 +34,7 @@ import dev.milinko.workoutapp.ui.components.PoseOverlay
 fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val landmarks by viewModel.landmarks.collectAsState()
+    val frameSize by viewModel.frameSize.collectAsState()
     val isSessionActive by viewModel.isSessionActive.collectAsState()
     val showSummary by viewModel.showSummary.collectAsState()
 
@@ -132,58 +133,45 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Gornja polovina: Vizuelni prikaz
+            // Gornja polovina: live kamera sa skeletom iscrtanim preko nje (jedan jedinstveni prikaz)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .background(Color.Black)
         ) {
-            // Desni ćošak: Live prikaz sa kamere
-            Box(
+            CameraPreview(
+                modifier = Modifier.fillMaxSize(),
+                lensFacing = if (isFrontCamera) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK,
+                onFrame = { viewModel.onFrame(it) }
+            )
+
+            // Skelet se crta PREKO kamere - PoseOverlay sam mapira sirove landmark koordinate
+            // (u koordinatnom sistemu analizirane slike, frameSize) na stvarnu veličinu ovog
+            // Box-a, istom FILL_CENTER logikom koju PreviewView koristi za samu kameru, plus
+            // mirror za prednju kameru (PreviewView ogleda prednju kameru, sirovi landmarci ne).
+            PoseOverlay(
+                landmarks = landmarks,
+                sourceWidth = frameSize.first,
+                sourceHeight = frameSize.second,
+                mirror = isFrontCamera,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Prednja/zadnja kamera toggle
+            IconButton(
+                onClick = { isFrontCamera = !isFrontCamera },
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .fillMaxWidth(0.45f)
-                    .fillMaxHeight(0.9f)
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(2.dp, Color.Gray.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .align(Alignment.BottomEnd)
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.Black.copy(alpha = 0.5f))
             ) {
-                CameraPreview(
-                    modifier = Modifier.fillMaxSize(),
-                    lensFacing = if (isFrontCamera) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK,
-                    onFrame = { viewModel.onFrame(it) }
+                Icon(
+                    Icons.Default.Cameraswitch,
+                    contentDescription = "Switch camera",
+                    tint = Color.White
                 )
-
-                // Prednja/zadnja kamera toggle
-                IconButton(
-                    onClick = { isFrontCamera = !isFrontCamera },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(Color.Black.copy(alpha = 0.5f))
-                ) {
-                    Icon(
-                        Icons.Default.Cameraswitch,
-                        contentDescription = "Switch camera",
-                        tint = Color.White
-                    )
-                }
-            }
-
-            // Levi ćošak: Skenirani skelet
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxWidth(0.45f)
-                    .fillMaxHeight(0.9f)
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.DarkGray.copy(alpha = 0.3f))
-                    .border(2.dp, Color.Cyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-            ) {
-                PoseOverlay(landmarks = landmarks, modifier = Modifier.fillMaxSize())
             }
 
             // Warning if user is not in frame or full body not visible

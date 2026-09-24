@@ -6,13 +6,43 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.google.mlkit.vision.pose.PoseLandmark
+import kotlin.math.max
 
+/**
+ * Crta skelet PREKO live kamere - `sourceWidth`/`sourceHeight` su dimenzije analizirane slike
+ * (iz [dev.milinko.workoutapp.pose.PoseDetectorProcessor], već svedene na "upright" orijentaciju)
+ * u čijem su koordinatnom sistemu `landmarks` pozicije. Ovaj Canvas se crta preko
+ * [CameraPreview]-a koji koristi PreviewView-ov podrazumevani FILL_CENTER scale type (uveličaj
+ * dok ne popuni ceo prikaz, centriraj, isečeni viškovi se ne vide) - mapiranje ispod namerno
+ * računa istu transformaciju da bi se tačke poklopile sa slikom koju korisnik stvarno vidi.
+ * `mirror = true` (prednja kamera) vodi računa o tome da PreviewView front-kameru sam ogleda
+ * horizontalno, dok sirovi landmarci iz ImageAnalysis-a NISU ogledani.
+ */
 @Composable
 fun PoseOverlay(
     landmarks: Map<Int, PoseLandmark>,
+    sourceWidth: Int,
+    sourceHeight: Int,
+    mirror: Boolean,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
+        if (sourceWidth <= 0 || sourceHeight <= 0 || size.width <= 0f || size.height <= 0f) {
+            return@Canvas
+        }
+
+        // FILL_CENTER: skaliraj tako da slika popuni ceo Canvas (veći od dva scale faktora),
+        // pa centriraj - isto ponašanje kao PreviewView-ov podrazumevani scale type.
+        val scale = max(size.width / sourceWidth.toFloat(), size.height / sourceHeight.toFloat())
+        val offsetX = (size.width - sourceWidth * scale) / 2f
+        val offsetY = (size.height - sourceHeight * scale) / 2f
+
+        fun mapPoint(x: Float, y: Float): Offset {
+            val scaledX = x * scale + offsetX
+            val scaledY = y * scale + offsetY
+            return Offset(if (mirror) size.width - scaledX else scaledX, scaledY)
+        }
+
         // Prag za inFrameLikelihood - samo lanmarki sa većom pouzdanošću se crtaju
         val CONFIDENCE_THRESHOLD = 0.5f
 
@@ -24,7 +54,7 @@ fun PoseOverlay(
                 drawCircle(
                     color = Color.White.copy(alpha = alpha * 0.5f),
                     radius = 6f,
-                    center = Offset(landmark.position.x, landmark.position.y)
+                    center = mapPoint(landmark.position.x, landmark.position.y)
                 )
             }
         }
@@ -60,19 +90,19 @@ fun PoseOverlay(
 
                 drawLine(
                     color = Color.Cyan.copy(alpha = lineAlpha),
-                    start = Offset(start.position.x, start.position.y),
-                    end = Offset(end.position.x, end.position.y),
+                    start = mapPoint(start.position.x, start.position.y),
+                    end = mapPoint(end.position.x, end.position.y),
                     strokeWidth = 6f
                 )
             }
         }
-        
+
         // Istaknimo zglobove koji se analiziraju za sklekove/trakcije
         val activeLandmarks = listOf(
             PoseLandmark.LEFT_SHOULDER, PoseLandmark.LEFT_ELBOW, PoseLandmark.LEFT_WRIST,
             PoseLandmark.RIGHT_SHOULDER, PoseLandmark.RIGHT_ELBOW, PoseLandmark.RIGHT_WRIST
         )
-        
+
         activeLandmarks.forEach { type ->
             landmarks[type]?.let { landmark ->
                 if (landmark.inFrameLikelihood > CONFIDENCE_THRESHOLD) {
@@ -80,11 +110,10 @@ fun PoseOverlay(
                     drawCircle(
                         color = Color.Yellow.copy(alpha = alpha),
                         radius = 10f,
-                        center = Offset(landmark.position.x, landmark.position.y)
+                        center = mapPoint(landmark.position.x, landmark.position.y)
                     )
                 }
             }
         }
     }
 }
-

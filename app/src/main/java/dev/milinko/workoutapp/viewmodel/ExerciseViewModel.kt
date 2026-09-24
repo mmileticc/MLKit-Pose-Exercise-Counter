@@ -42,6 +42,13 @@ class ExerciseViewModel @Inject constructor(
     private val _landmarks = MutableStateFlow<Map<Int, PoseLandmark>>(emptyMap())
     val landmarks: StateFlow<Map<Int, PoseLandmark>> = _landmarks.asStateFlow()
 
+    // Dimenzije (već svedene na "upright" orijentaciju - videti PoseDetectorProcessor) analizirane
+    // slike iz koje su gornji landmarci izračunati. Služi ISKLJUČIVO za skaliranje/pozicioniranje
+    // PoseOverlay-a preko live kamere na ekranu - ne dira se logika brojanja ponavljanja, ona i
+    // dalje radi sa sirovim landmark koordinatama kao i do sada.
+    private val _frameSize = MutableStateFlow(0 to 0)
+    val frameSize: StateFlow<Pair<Int, Int>> = _frameSize.asStateFlow()
+
     private val _isSessionActive = MutableStateFlow(false)
     val isSessionActive = _isSessionActive.asStateFlow()
 
@@ -225,10 +232,11 @@ class ExerciseViewModel @Inject constructor(
             image.close()
             return
         }
-        processor.processImage(image) { landmarks ->
+        processor.processImage(image) { landmarks, imageWidth, imageHeight ->
             // Primeni EMA filtere i outlier rejection na sve landmark koordinate
             val smoothedLandmarks = applyEMAAndOutlierRejection(landmarks)
             _landmarks.value = smoothedLandmarks
+            _frameSize.value = imageWidth to imageHeight
             _uiState.value = analyzer().analyze(smoothedLandmarks)
         }
     }
