@@ -4,7 +4,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
@@ -22,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.milinko.workoutapp.exercise.ExerciseType
 import androidx.camera.core.CameraSelector
@@ -137,7 +140,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
+                .weight(2f)
                 .background(Color.Black)
         ) {
             CameraPreview(
@@ -209,121 +212,140 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
             }
         }
 
-        // Lower half: Info and controls
+        // Donja polovina: sad eksplicitno weight(1f) naspram kamere weight(2f) iznad - kamera
+        // dobija otprilike 2/3 visine, ovaj deo otprilike 1/3. Sadržaj promenljive visine
+        // (birač vežbe, brojač, forma/ugao, pull-up banner) je u unutrašnjem Column-u koji
+        // skroluje AKO ne stane u tu 1/3 (npr. manji telefon + banner istovremeno) - dugme za
+        // start/kraj je namerno VAN tog scroll-a, uvek fiksno vidljivo na dnu, isto kao ranije
+        // dokazano rešenje za "dugme nestalo van ekrana" bag.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Exercise picker - only before starting, switching mid-session would reset the count
-            if (!isSessionActive) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Exercise picker - only before starting, switching mid-session would reset the count
+                if (!isSessionActive) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ExerciseType.entries.forEach { type ->
+                            FilterChip(
+                                selected = exerciseType == type,
+                                onClick = { viewModel.setExerciseType(type) },
+                                label = { Text(type.displayName) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                // Main counter - i dalje krupno (80sp), samo malo manje nego pre (100sp) da
+                // udobno stane zajedno sa ostatkom u ~1/3 ekrana.
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = exerciseType.displayName.uppercase(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "${state.count}",
+                        style = MaterialTheme.typography.displayLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            fontSize = 80.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Form status and angle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ExerciseType.entries.forEach { type ->
-                        FilterChip(
-                            selected = exerciseType == type,
-                            onClick = { viewModel.setExerciseType(type) },
-                            label = { Text(type.displayName) },
-                            modifier = Modifier.weight(1f)
+                    // Form
+                    Surface(
+                        color = if (state.isCorrectForm) Color.Green.copy(alpha = 0.1f) else Color.Red.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(
+                            2.dp,
+                            if (state.isCorrectForm) Color.Green else Color.Red
+                        )
+                    ) {
+                        Text(
+                            text = if (state.isCorrectForm) "FORM OK" else "BAD FORM",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.isCorrectForm) Color.Green else Color.Red
+                        )
+                    }
+
+                    // Angle - ugao se i dalje prati/smoothuje po stepenu kao i do sad (ništa u
+                    // brojanju ponavljanja nije dirano), ali se PRIKAZ zaokružuje na najbliži
+                    // petak (5°) da ne treperi/menja se svaki frejm za po 1° - samo kozmetika.
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val displayedAngle = (state.currentAngle / 5.0).roundToInt() * 5
+                        Text(
+                            text = "${displayedAngle}°",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (exerciseType == ExerciseType.PUSH_UPS) MaterialTheme.colorScheme.primary else Color.Cyan
+                        )
+                        Text(
+                            text = "ELBOW ANGLE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
+
+                // Additional info about hands stability for pull-ups
+                if (exerciseType == ExerciseType.PULL_UPS && isSessionActive) {
+                    Surface(
+                        color = if (state.visibilityMessage?.contains("STABILIZATION") == true || state.visibilityMessage?.contains("STEADY") == true)
+                            Color.Yellow.copy(alpha = 0.2f) else Color.Green.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        val isStabilizing = state.visibilityMessage?.contains("STABILIZATION") == true || state.visibilityMessage?.contains("STEADY") == true
+                        Text(
+                            text = if (isStabilizing)
+                                "HAND STABILIZATION IN PROGRESS${state.visibilityMessage?.substringAfter("%)")?.let { "" } ?: state.visibilityMessage?.substringAfter("HANDS") ?: ""}"
+                            else "HANDS FIXED",
+                            color = if (isStabilizing)
+                                Color(0xFF8B8000) else Color(0xFF006400),
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 20.sp
+                            ),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
             }
 
-            // Main counter
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = exerciseType.displayName.uppercase(),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "${state.count}",
-                    style = MaterialTheme.typography.displayLarge.copy(
-                        fontWeight = FontWeight.Black,
-                        fontSize = 100.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
+            Spacer(Modifier.height(10.dp))
 
-            // Form status and angle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Form
-                Surface(
-                    color = if (state.isCorrectForm) Color.Green.copy(alpha = 0.1f) else Color.Red.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(
-                        2.dp,
-                        if (state.isCorrectForm) Color.Green else Color.Red
-                    )
-                ) {
-                    Text(
-                        text = if (state.isCorrectForm) "FORM OK" else "BAD FORM",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        fontWeight = FontWeight.Bold,
-                        color = if (state.isCorrectForm) Color.Green else Color.Red
-                    )
-                }
-
-                // Angle
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${state.currentAngle.toInt()}°",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (exerciseType == ExerciseType.PUSH_UPS) MaterialTheme.colorScheme.primary else Color.Cyan
-                    )
-                    Text(
-                        text = "ELBOW ANGLE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
-                    )
-                }
-            }
-
-            // Additional info about hands stability for pull-ups
-            if (exerciseType == ExerciseType.PULL_UPS && isSessionActive) {
-                Surface(
-                    color = if (state.visibilityMessage?.contains("STABILIZATION") == true || state.visibilityMessage?.contains("STEADY") == true)
-                        Color.Yellow.copy(alpha = 0.2f) else Color.Green.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    val isStabilizing = state.visibilityMessage?.contains("STABILIZATION") == true || state.visibilityMessage?.contains("STEADY") == true
-                    Text(
-                        text = if (isStabilizing)
-                            "HAND STABILIZATION IN PROGRESS${state.visibilityMessage?.substringAfter("%)")?.let { "" } ?: state.visibilityMessage?.substringAfter("HANDS") ?: ""}"
-                        else "HANDS FIXED",
-                        color = if (isStabilizing)
-                            Color(0xFF8B8000) else Color(0xFF006400),
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 20.sp
-                        ),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-
-            // Controls
+            // Controls - pinned OUTSIDE the scrollable Column above, always visible no matter
+            // how much (or how little) space the info above needs.
             if (!isSessionActive) {
                 Button(
                     onClick = { viewModel.startSession() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp),
+                        .height(56.dp),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
@@ -335,7 +357,7 @@ fun ExerciseScreen(onBack: () -> Unit, viewModel: ExerciseViewModel = hiltViewMo
                     onClick = { viewModel.stopSession() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp),
+                        .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
                 ) {
